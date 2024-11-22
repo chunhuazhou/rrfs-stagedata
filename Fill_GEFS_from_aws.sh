@@ -8,82 +8,91 @@
 #SBATCH --qos=batch
 #SBATCH --partition=service
 #SBATCH --ntasks=1
-#SBATCH --account=zrtrr
-#SBATCH --job-name=Fill_GEFS_from_aws
-#SBATCH --output=./Fill_GEFS_from_aws.log
+#SBATCH --account=nrtrr
+#SBATCH --job-name=aws_GEFS
+#SBATCH --output=./log.aws_GEFS.2
 
 # For WCOSS2
-#PBS -A RRFS-DEV
-#PBS -q dev_transfer
-#PBS -l select=1:ncpus=1:mem=2G
-#PBS -l walltime=06:00:00
-#PBS -N Fill_GEFS_from_aws
-#PBS -j oe -o log.Fill_GEFS_from_aws
+##PBS -A RRFS-DEV
+##PBS -q dev_transfer
+##PBS -l select=1:ncpus=1:mem=2G
+##PBS -l walltime=06:00:00
+##PBS -N Fill_GEFS_from_aws
+##PBS -j oe -o log.Fill_GEFS_from_aws
 
 # https://noaa-gefs-pds.s3.amazonaws.com/gefs.20220429/00/atmos/pgrb2ap5/gep01.t00z.pgrb2a.0p50.f114
 # https://noaa-gefs-pds.s3.amazonaws.com/gefs.20220429/00/atmos/pgrb2bp5/gep01.t00z.pgrb2b.0p50.f114
 
 set -x
 
-#datadir=/mnt/lfs1/BMC/wrfruc/chunhua/retro_data/GEFS
-#targetdatadir=/mnt/lfs1/BMC/wrfruc/chunhua/retro_data/GEFS/merged
-datadir=/scratch1/BMC/wrfruc/chunhua/data/GEFS
+# Jet:
+#datadir=/lfs4/BMC/wrfruc/RRFS_RETRO_DATA/GEFS
+datadir=/lfs5/BMC/wrfruc/Chunhua.Zhou/w4/data/GEFS
+# Hera:
+#datadir=/scratch2/BMC/zrtrr/RRFS_RETRO_DATA/GEFS
+
 waittime=30
 maxtries=10
+merge=false  # true
 
-#for memdate in gep23.2022072012 gep01.2022072112 gep02.2022072212 gep03.2022072206 gep23.2022072318 gep27.2022072406
-#for memdate in gep01.2022072112 gep02.2022072212 gep03.2022072206 gep23.2022072318 gep27.2022072406
-#for memdate in gep18.2022020418 
-for memdate in $( seq -f "gep%02g.20220210" 21 30 ) 
+#for dates in 202307{28..31} 202308{01..07} 202308{25..31}
+for dates in 20240525
 do
-mem=${memdate:0:5}
-yyyymmdd=${memdate:6:8}
-#hh=${memdate:14:2} 
+  for hh in 12
+  do
+    awsdir="https://noaa-gefs-pds.s3.amazonaws.com/gefs.${yyyymmdd}/${hh}/atmos"
+    for mems in {01..30}
+    do
+      mem=gep$( printf "%02d" $mems )
 
-for hh in 00 06 12 18
-do
-echo "processing member $mem for $yyyymmdd $hh"
+      if [[ ${merge} == true ]]; then
+        mkdir -p ${datadir}/$mem
+      fi
 
-#for mems in {01..30}; do
-#  mem=$( printf "%02d" $mems ) 
-  if [ ! -d $datadir/$mem ]; then 
-    mkdir -p $datadir/$mem
-  fi
-  cd $datadir/$mem
-#  for dates in  20220428 20220429 20220430 20220501 20220502 20220503 20220504 20220505 20220506 20220507 20220508 20220509 20220510 20220511 20220512 ; do
-#    yyyymmdd=$dates
-    yy="${yyyymmdd:2:2}"
-    yyyy="${yyyymmdd:0:4}"
-    mm="${yyyymmdd:4:2}"
-    dd="${yyyymmdd:6:2}"
-    doy=`date  --date=$yyyymmdd +%j `
-#    for hrs in {00..18..06}; do
-#      hh=$( printf "%02d" $hrs )
-      for fcsthr in {06..75..03}; do
+      for fcsthr in {00..45..03}
+        do
         fhr=$( printf "%03d" $fcsthr )
-        localfile=${yy}${doy}${hh}000${fhr}
 
-        if [ ! -s $localfile ]; then
+        yyyymmdd=$dates
+        yy="${yyyymmdd:2:2}"
+        yyyy="${yyyymmdd:0:4}"
+        mm="${yyyymmdd:4:2}"
+        dd="${yyyymmdd:6:2}"
+        doy=`date  --date=$yyyymmdd +%j `
 
-        awsfile_a="https://noaa-gefs-pds.s3.amazonaws.com/gefs.${yyyymmdd}/${hh}/atmos/pgrb2ap5/${mem}.t${hh}z.pgrb2a.0p50.f${fhr}"
-        localfile_a="${mem}.t${hh}z.pgrb2a.0p50.f${fhr}"
+        echo "processing member $mem for $yyyymmdd $hh"
+        a_dir=$datadir/gefs.${dates}/${hh}/pgrb2ap5
+        if [ ! -d ${a_dir} ]; then
+          mkdir -p ${a_dir}
+        fi
+        b_dir=$datadir/gefs.${dates}/${hh}/pgrb2bp5
+        if [ ! -d ${b_dir} ]; then
+          mkdir -p ${b_dir}
+        fi
+
+        awsfile_a="${awsdir}/pgrb2ap5/${mem}.t${hh}z.pgrb2a.0p50.f${fhr}"
+        cd ${a_dir}
+        localfile_a=$(basename ${awsfile_a} )
         if [ ! -s  ${localfile_a} ]; then
           tries=0
-          while [[ ! -s ${localfile_a} && $tries -lt $maxtries ]]; do
-            timeout  --foreground  $waittime wget ${awsfile_a}
-            if [ $? -ne 0 ] ; then
-              echo "Failed to download ${awsfile_a} ... trying again ..."
-              rm -f ${localfile_a}
-              let tries=$((tries+1))
-            fi
+          while [[ ! -s ${localfile_a} && $tries -lt $maxtries ]]
+          do
+             timeout  --foreground  $waittime wget ${awsfile_a}
+             if [ $? -ne 0 ] ; then
+               echo "Failed to download ${awsfile_a} ... trying again ..."
+               rm -f ${localfile_a}
+               let tries=$((tries+1))
+             fi
           done
         fi
 
-        awsfile_b="https://noaa-gefs-pds.s3.amazonaws.com/gefs.${yyyymmdd}/${hh}/atmos/pgrb2bp5/${mem}.t${hh}z.pgrb2b.0p50.f${fhr}"
-        localfile_b="${mem}.t${hh}z.pgrb2b.0p50.f${fhr}"
+        awsfile_b="${awsdir}/pgrb2bp5/${mem}.t${hh}z.pgrb2b.0p50.f${fhr}"
+        cd ${b_dir}
+        localfile_b=$(basename ${awsfile_b} )
         if [ ! -s  ${localfile_b} ]; then
           tries=0
-          while [[ ! -s ${localfile_b} && $tries -lt $maxtries ]]; do
+          while [[ ! -s ${localfile_b} && $tries -lt $maxtries ]]
+          do
             timeout  --foreground  $waittime wget ${awsfile_b}
             if [ $? -ne 0 ] ; then
               echo "Failed to download ${awsfile_b} ... trying again ..."
@@ -92,19 +101,15 @@ echo "processing member $mem for $yyyymmdd $hh"
             fi
           done
         fi
-
-        if [ -s ${localfile_a} ] && [ -s ${localfile_b} ]; then
-           cat ${localfile_a} ${localfile_b} > ${localfile}
-           res=$?
-           if [ $res == 0 ]; then
-             rm -f  ${localfile_a} ${localfile_b}
-           fi
+ 
+        if [[ ${merge} == true ]]; then
+          localfile=${datadir}/$mem/${yy}${doy}${hh}000${fhr}
+          if [ -s ${a_dir}/${localfile_a} ] && [ -s ${b_dir}/${localfile_b} ]; then
+             cat ${a_dir}/${localfile_a} ${b_dir}/${localfile_b} > ${localfile}
+          fi
         fi
 
-        fi
-
-#      done
-    done
-  done
-done
-
+      done   # fcsthr
+    done  # mems
+  done  # hh
+done  # dates
