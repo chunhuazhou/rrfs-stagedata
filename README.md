@@ -33,7 +33,7 @@ RAP conventional observation: `obsrap.ksh`,
 zip file contain several types of data, *.rap.* and *rap_e* data are used in RRFS, you can delete other types if it’s needed.
 
 Radar reflectivity: `refl_oneColumnADay.ksh`, find a reflectivity column around 00, 15, 30, 45 minute, so four columns each hour, ~3k files per day. 
-use `refl.ksh` to get MRMS reflectivity data and unzip files. It’s almost 23K files/day, the files are saved under `upperair/mrms/conus/MergedReflectivityQC` automatically, so usually I put data in tmp directory, if all data looks good, then  move data day by day to the desired location, for example, 
+`refl.ksh` is to get MRMS reflectivity all column data, it’s ~23K per day. The files are saved under `upperair/mrms/conus/MergedReflectivityQC` automatically, so usually I put data in tmp directory, if all data looks good, then  move data day by day to the desired location, for example, 
             `mv tmp/upperair/mrms/conus/MergedReflectivityQC/*20230610*   reflectivity/`
 	
 
